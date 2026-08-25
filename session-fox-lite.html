@@ -142,6 +142,8 @@
       <div class="row"><span class="k">Куки</span><span id="ccount">0</span></div>
       <div class="row"><span class="k">Сессия</span><span id="health"></span></div>
       <div class="row"><span class="k">Страна</span><span id="country">—</span></div>
+      <div class="row"><span class="k">Проверка</span><span id="checksum">—</span></div>
+      <div id="checklist" style="margin:0.5rem 0 0.25rem;font-size:0.78rem;line-height:1.7;color:var(--muted)"></div>
       <div class="row"><span class="k">Ключи</span><span id="keys" style="font-size:0.8rem;word-break:break-all">—</span></div>
       <button class="btn" id="launch" type="button">Скачать pack → Firefox + tiktok.com</button>
     </div>
@@ -158,6 +160,35 @@
 const DEFAULT_DOMAIN = ".tiktok.com";
 const YEAR = 365 * 24 * 3600;
 const SESSION_KEYS = ["sessionid", "sid_tt", "uid_tt", "sid_guard", "tt_chain_token", "ttwid"];
+const COOKIE_CHECKS = [
+  { name: "sessionid", label: "sessionid", required: true },
+  { name: "sid_tt", label: "sid_tt", required: true },
+  { name: "uid_tt", label: "uid_tt", required: true },
+  { name: "sid_guard", label: "sid_guard", required: false },
+  { name: "ttwid", label: "ttwid", required: false },
+  { name: "tt_chain_token", label: "tt_chain_token", required: false },
+  { name: "store-country-code", label: "store-country-code", required: false },
+  { name: "msToken", label: "msToken", required: false },
+  { name: "odin_tt", label: "odin_tt", required: false },
+];
+
+function checkCookies(cookies) {
+  const names = new Set(cookies.map(c => c.name.toLowerCase()));
+  const results = COOKIE_CHECKS.map(item => {
+    const present = names.has(item.name.toLowerCase());
+    return { ...item, present };
+  });
+  const required = results.filter(r => r.required);
+  const missingReq = required.filter(r => !r.present);
+  const presentCount = results.filter(r => r.present).length;
+  return {
+    results,
+    presentCount,
+    total: results.length,
+    requiredOk: missingReq.length === 0,
+    missingRequired: missingReq.map(r => r.name),
+  };
+}
 const COUNTRY_COOKIE_NAMES = [
   "store-country-code", "store_country_code", "store-country-code-src",
   "tt-target-idc", "tt_target_idc", "country_code", "country", "loc", "lang_code"
@@ -521,6 +552,20 @@ function showSession(name, cookies) {
   } else {
     cEl.textContent = "—";
   }
+  const chk = checkCookies(cookies);
+  const sum = document.getElementById("checksum");
+  if (chk.requiredOk) {
+    sum.innerHTML = '<span class="badge ok">' + chk.presentCount + "/" + chk.total + " · обязательные есть</span>";
+  } else {
+    sum.innerHTML = '<span class="badge bad">нет: ' + chk.missingRequired.join(", ") + "</span>";
+  }
+  const list = document.getElementById("checklist");
+  list.innerHTML = chk.results.map(r => {
+    const mark = r.present ? '<span style="color:var(--ok)">✓</span>' : '<span style="color:var(--bad)">✗</span>';
+    const req = r.required ? ' <span style="opacity:0.6">(обяз.)</span>' : '';
+    const col = r.present ? 'var(--text)' : 'var(--muted)';
+    return '<div style="color:' + col + '">' + mark + ' ' + r.label + req + '</div>';
+  }).join("");
   const important = cookies.filter(c => SESSION_KEYS.includes(c.name.toLowerCase())).map(c => c.name);
   document.getElementById("keys").textContent = important.length ? important.join(", ") : "—";
   panel.classList.add("show");
@@ -562,6 +607,11 @@ document.getElementById("parseBtn").addEventListener("click", () => {
 });
 document.getElementById("launch").addEventListener("click", async () => {
   if (!current || !current.cookies.length) return;
+  const chk = checkCookies(current.cookies);
+  if (!chk.requiredOk) {
+    const go = confirm("Нет обязательных cookie: " + chk.missingRequired.join(", ") + "\n\nСессия скорее всего не войдёт. Всё равно скачать pack?");
+    if (!go) return;
+  }
   const btn = document.getElementById("launch");
   btn.disabled = true;
   btn.textContent = "Собираю pack…";
