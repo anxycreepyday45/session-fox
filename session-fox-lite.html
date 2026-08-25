@@ -118,12 +118,42 @@
       resize: vertical;
     }
     .or { text-align: center; color: var(--muted); font-size: 0.8rem; margin: 1rem 0 0.25rem; }
+    .upd {
+      display: none;
+      margin-top: 1rem;
+      padding: 0.85rem 1rem;
+      border-radius: 10px;
+      border: 1px solid rgba(61,214,140,0.35);
+      background: rgba(61,214,140,0.1);
+      font-size: 0.85rem;
+    }
+    .upd.show { display: block; }
+    .upd .actions { margin-top: 0.6rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .upd .btn2 {
+      padding: 0.45rem 0.85rem;
+      border-radius: 8px;
+      border: none;
+      font-weight: 600;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+    .upd .btn2.primary { background: var(--ok); color: #0c0c0e; }
+    .upd .btn2.ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
+    .ver { color: var(--muted); font-size: 0.75rem; margin-top: 0.5rem; }
   </style>
 </head>
 <body>
   <div class="wrap">
     <h1>Session Fox Lite</h1>
     <p class="sub">Без npm · кинь .txt с куками → скачай zip → открой Firefox на tiktok.com</p>
+    <p class="ver" id="verLabel">v1.2.0</p>
+    <div class="upd" id="updBanner">
+      <div id="updText">Доступна новая версия</div>
+      <div class="actions">
+        <button type="button" class="btn2 primary" id="updDownload">Скачать обновление</button>
+        <button type="button" class="btn2 ghost" id="updDismiss">Позже</button>
+      </div>
+    </div>
 
     <div class="drop" id="drop">
       <strong>Перетащи cookies.txt сюда</strong>
@@ -630,6 +660,88 @@ document.getElementById("launch").addEventListener("click", async () => {
     btn.disabled = false;
   }
 });
+
+// --- auto update ---
+const APP_VERSION = "1.2.0";
+const LITE_URL = "https://raw.githubusercontent.com/anxycreepyday45/session-fox/main/session-fox-lite.html";
+const VER_URL = "https://raw.githubusercontent.com/anxycreepyday45/session-fox/main/VERSION";
+const DISMISS_KEY = "sessionfox_upd_dismiss";
+
+function parseVersion(v) {
+  return String(v || "").trim().replace(/^v/i, "").split(".").map(n => parseInt(n, 10) || 0);
+}
+function isNewer(remote, local) {
+  const a = parseVersion(remote);
+  const b = parseVersion(local);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i] || 0, y = b[i] || 0;
+    if (x > y) return true;
+    if (x < y) return false;
+  }
+  return false;
+}
+
+async function checkForUpdate() {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    let remoteVer = null;
+    try {
+      const r = await fetch(VER_URL + "?t=" + Date.now(), { signal: ctrl.signal, cache: "no-store" });
+      if (r.ok) remoteVer = (await r.text()).trim().split(/\s|\n/)[0];
+    } catch (_) {}
+    if (!remoteVer) {
+      const r2 = await fetch(LITE_URL + "?t=" + Date.now(), { signal: ctrl.signal, cache: "no-store" });
+      if (!r2.ok) return;
+      const text = await r2.text();
+      const m = text.match(/APP_VERSION\s*=\s*["']([0-9.]+)["']/);
+      if (m) remoteVer = m[1];
+    }
+    clearTimeout(t);
+    if (!remoteVer || !isNewer(remoteVer, APP_VERSION)) return;
+    const dismissed = localStorage.getItem(DISMISS_KEY);
+    if (dismissed === remoteVer) return;
+    const banner = document.getElementById("updBanner");
+    document.getElementById("updText").textContent =
+      "Доступна v" + remoteVer + " (сейчас v" + APP_VERSION + ")";
+    banner.classList.add("show");
+    banner.dataset.remote = remoteVer;
+  } catch (e) {
+    // silent — offline / file:// CORS
+  }
+}
+
+document.getElementById("updDismiss").addEventListener("click", () => {
+  const banner = document.getElementById("updBanner");
+  if (banner.dataset.remote) localStorage.setItem(DISMISS_KEY, banner.dataset.remote);
+  banner.classList.remove("show");
+});
+
+document.getElementById("updDownload").addEventListener("click", async () => {
+  const btn = document.getElementById("updDownload");
+  btn.disabled = true;
+  btn.textContent = "Скачиваю…";
+  try {
+    const r = await fetch(LITE_URL + "?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const text = await r.text();
+    const blob = new Blob([text], { type: "text/html;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "session-fox-lite.html";
+    a.click();
+    URL.revokeObjectURL(a.href);
+    btn.textContent = "Скачано — замени файл и открой заново";
+    const banner = document.getElementById("updBanner");
+    if (banner.dataset.remote) localStorage.setItem(DISMISS_KEY, banner.dataset.remote);
+  } catch (e) {
+    btn.textContent = "Ошибка — открой git pull";
+    btn.disabled = false;
+    window.open("https://github.com/anxycreepyday45/session-fox", "_blank");
+  }
+});
+
+checkForUpdate();
 </script>
 </body>
 </html>
