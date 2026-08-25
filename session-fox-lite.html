@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Session Fox Lite</title>
+  <script src="https://cdn.jsdelivr.net/npm/sql.js@1.12.0/dist/sql-wasm.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <style>
+    :root {
+      --bg: #0c0c0e;
+      --surface: #141416;
+      --border: #2a2a2e;
+      --text: #e8e6e1;
+      --muted: #8a8a90;
+      --accent: #e8e6e1;
+      --ok: #3dd68c;
+      --warn: #f5a524;
+      --bad: #f31260;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.45;
+    }
+    .wrap { max-width: 640px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
+    .sub { color: var(--muted); font-size: 0.9rem; margin-top: 0.35rem; }
+    .drop {
+      margin-top: 1.75rem;
+      border: 1.5px dashed var(--border);
+      border-radius: 12px;
+      padding: 2.5rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      background: var(--surface);
+    }
+    .drop:hover, .drop.over {
+      border-color: var(--accent);
+      background: #1a1a1e;
+    }
+    .drop strong { display: block; margin-bottom: 0.35rem; }
+    .drop span { color: var(--muted); font-size: 0.85rem; }
+    input[type="file"] { display: none; }
+    .panel {
+      margin-top: 1.25rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      display: none;
+    }
+    .panel.show { display: block; }
+    .row { display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; font-size: 0.9rem; }
+    .row .k { color: var(--muted); }
+    .badge {
+      display: inline-block;
+      padding: 0.15rem 0.55rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge.ok { background: rgba(61,214,140,0.15); color: var(--ok); }
+    .badge.warn { background: rgba(245,165,36,0.15); color: var(--warn); }
+    .badge.bad { background: rgba(243,18,96,0.15); color: var(--bad); }
+    .btn {
+      margin-top: 1rem;
+      width: 100%;
+      padding: 0.85rem 1rem;
+      border: none;
+      border-radius: 10px;
+      background: var(--accent);
+      color: #0c0c0e;
+      font-weight: 700;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn:hover:not(:disabled) { filter: brightness(1.05); }
+    .err {
+      margin-top: 1rem;
+      padding: 0.75rem 1rem;
+      background: rgba(243,18,96,0.12);
+      border: 1px solid rgba(243,18,96,0.35);
+      border-radius: 8px;
+      color: #ff8aab;
+      font-size: 0.85rem;
+      display: none;
+    }
+    .err.show { display: block; }
+    .hint {
+      margin-top: 1.5rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .hint code {
+      background: #1e1e22;
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      font-size: 0.78rem;
+    }
+    textarea {
+      width: 100%;
+      margin-top: 1rem;
+      min-height: 90px;
+      background: #0e0e10;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 0.75rem;
+      font-family: ui-monospace, monospace;
+      font-size: 0.8rem;
+      resize: vertical;
+    }
+    .or { text-align: center; color: var(--muted); font-size: 0.8rem; margin: 1rem 0 0.25rem; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Session Fox Lite</h1>
+    <p class="sub">Без npm · кинь .txt с куками → скачай zip → открой Firefox на tiktok.com</p>
+
+    <div class="drop" id="drop">
+      <strong>Перетащи cookies.txt сюда</strong>
+      <span>или кликни · Netscape / name=value / Cookie header</span>
+      <input type="file" id="file" accept=".txt,.cookies,text/plain,*/*" />
+    </div>
+
+    <p class="or">или вставь текст кук</p>
+    <textarea id="paste" placeholder="Вставь содержимое .txt с куками…"></textarea>
+    <button class="btn" id="parseBtn" style="margin-top:0.75rem" type="button">Разобрать текст</button>
+
+    <div class="err" id="err"></div>
+
+    <div class="panel" id="panel">
+      <div class="row"><span class="k">Файл</span><span id="fname">—</span></div>
+      <div class="row"><span class="k">Куки</span><span id="ccount">0</span></div>
+      <div class="row"><span class="k">Сессия</span><span id="health"></span></div>
+      <div class="row"><span class="k">Ключи</span><span id="keys" style="font-size:0.8rem;word-break:break-all">—</span></div>
+      <button class="btn" id="launch" type="button">Скачать pack → Firefox + tiktok.com</button>
+    </div>
+
+    <div class="hint">
+      <strong>На Fedora после скачивания:</strong><br>
+      <code>unzip имя.zip && cd имя && chmod +x open-tiktok.sh && ./open-tiktok.sh</code><br><br>
+      Нужен установленный Firefox: <code>sudo dnf install -y firefox</code><br>
+      Интернет нужен только один раз — для загрузки sql.js / jszip с CDN.
+    </div>
+  </div>
+
+<script>
+const DEFAULT_DOMAIN = ".tiktok.com";
+const YEAR = 365 * 24 * 3600;
+const SESSION_KEYS = ["sessionid", "sid_tt", "uid_tt", "sid_guard", "tt_chain_token", "ttwid"];
+
+function stripBom(t) {
+  return t.replace(/^\uFEFF/, "").replace(/\0/g, "");
+}
+function parseExpiry(raw) {
+  if (raw === undefined || raw === null || raw === "") return Math.floor(Date.now()/1000) + YEAR;
+  const n = typeof raw === "number" ? raw : Number(String(raw).trim());
+  if (!Number.isFinite(n) || n <= 0) return Math.floor(Date.now()/1000) + YEAR;
+  if (n > 1e10) return Math.floor(n / 1000);
+  return Math.floor(n);
+}
+function normalizeDomain(raw, hostOnly) {
+  let d = (raw || "").trim();
+  if (!d) return DEFAULT_DOMAIN;
+  d = d.replace(/^https?:\/\//i, "").split("/")[0].split(":")[0].replace(/^\./, "").toLowerCase();
+  if (!d) return DEFAULT_DOMAIN;
+  return hostOnly ? d : "." + d;
+}
+function looksLikeName(name) {
+  return name && name.length <= 128 && !/\s/.test(name) && /^[\w.~+-]+$/.test(name);
+}
+function cookieKey(c) {
+  return c.name + "\0" + c.domain + "\0" + c.path;
+}
+function merge(list) {
+  const map = new Map();
+  for (const c of list) if (c.name) map.set(cookieKey(c), c);
+  return [...map.values()];
+}
+
+function parseNetscape(text) {
+  const out = [];
+  for (const raw of text.split(/\r?\n/)) {
+    let line = raw.trim();
+    if (!line) continue;
+    let httpOnly = false;
+    if (line.startsWith("#HttpOnly_")) {
+      httpOnly = true;
+      line = line.slice(10);
+    } else if (line.startsWith("#")) continue;
+    const tab = line.split("\t");
+    const parts = tab.length >= 7 ? tab : line.split(/\s+/);
+    if (parts.length < 7) continue;
+    const name = parts[5] || "";
+    if (!looksLikeName(name)) continue;
+    const hostOnly = (parts[1] || "").toUpperCase() === "FALSE";
+    out.push({
+      name,
+      value: parts.slice(6).join("\t"),
+      domain: normalizeDomain(parts[0], hostOnly),
+      path: (parts[2] || "/").startsWith("/") ? (parts[2] || "/") : "/" + (parts[2] || ""),
+      expires: parseExpiry(parts[4]),
+      secure: (parts[3] || "").toUpperCase() === "TRUE",
+      httpOnly,
+      sameSite: "unset",
+      hostOnly,
+    });
+  }
+  return out;
+}
+
+function parseNameValue(pair, extras) {
+  const t = pair.trim();
+  if (!t) return null;
+  const eq = t.indexOf("=");
+  if (eq <= 0) return null;
+  const name = t.slice(0, eq).trim();
+  let value = t.slice(eq + 1).trim();
+  if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) value = value.slice(1, -1);
+  if (!looksLikeName(name)) return null;
+  if (/^(domain|path|expires|max-age|samesite|secure|httponly)$/i.test(name)) return null;
+  return {
+    name, value,
+    domain: (extras && extras.domain) || DEFAULT_DOMAIN,
+    path: (extras && extras.path) || "/",
+    expires: (extras && extras.expires) || Math.floor(Date.now()/1000) + YEAR,
+    secure: extras && extras.secure !== undefined ? extras.secure : true,
+    httpOnly: (extras && extras.httpOnly) || false,
+    sameSite: (extras && extras.sameSite) || "unset",
+    hostOnly: (extras && extras.hostOnly) || false,
+  };
+}
+
+function parseHeader(text) {
+  const cleaned = text.replace(/^\s*cookie\s*:\s*/im, "");
+  const out = [];
+  for (const chunk of cleaned.split(";")) {
+    const c = parseNameValue(chunk);
+    if (c) out.push(c);
+  }
+  return out;
+}
+
+function parseSetCookie(text) {
+  const out = [];
+  for (const raw of text.split(/\r?\n/)) {
+    let line = raw.trim();
+    if (!line) continue;
+    line = line.replace(/^set-cookie\s*:\s*/i, "");
+    const pieces = line.split(";");
+    const first = parseNameValue(pieces[0] || "");
+    if (!first) continue;
+    let domain = DEFAULT_DOMAIN, path = "/", secure = false, httpOnly = false, sameSite = "unset", expires = first.expires, hostOnly = false;
+    for (let i = 1; i < pieces.length; i++) {
+      const p = pieces[i].trim();
+      const low = p.toLowerCase();
+      if (low === "secure") secure = true;
+      else if (low === "httponly") httpOnly = true;
+      else if (low.startsWith("domain=")) { domain = normalizeDomain(p.slice(7), false); hostOnly = false; }
+      else if (low.startsWith("path=")) path = p.slice(5) || "/";
+      else if (low.startsWith("expires=")) {
+        const t = Date.parse(p.slice(8));
+        if (Number.isFinite(t)) expires = Math.floor(t / 1000);
+      } else if (low.startsWith("max-age=")) {
+        const n = Number(p.slice(8));
+        if (Number.isFinite(n)) expires = Math.floor(Date.now()/1000) + n;
+      } else if (low.startsWith("samesite=")) {
+        const v = p.slice(9).toLowerCase();
+        if (v === "lax" || v === "strict" || v === "none") sameSite = v;
+      }
+    }
+    out.push({ ...first, domain, path, secure, httpOnly, sameSite, expires, hostOnly });
+  }
+  return out;
+}
+
+function parseNameValueLines(text) {
+  const out = [];
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const c = parseNameValue(line);
+    if (c) out.push(c);
+  }
+  return out;
+}
+
+function detectAndParse(text) {
+  text = stripBom(text);
+  if (!text.trim()) return { cookies: [], format: "empty" };
+  let cookies = parseNetscape(text);
+  if (cookies.length) return { cookies: merge(cookies), format: "netscape" };
+  cookies = parseSetCookie(text);
+  if (cookies.length) return { cookies: merge(cookies), format: "set-cookie" };
+  if (/cookie\s*:/i.test(text) || (text.includes("=") && text.includes(";") && !text.includes("\n"))) {
+    cookies = parseHeader(text);
+    if (cookies.length) return { cookies: merge(cookies), format: "header" };
+  }
+  cookies = parseNameValueLines(text);
+  if (cookies.length) return { cookies: merge(cookies), format: "name-value" };
+  cookies = parseHeader(text);
+  return { cookies: merge(cookies), format: cookies.length ? "header" : "unknown" };
+}
+
+function assess(cookies) {
+  const names = new Set(cookies.map(c => c.name.toLowerCase()));
+  const hasSession = SESSION_KEYS.some(k => names.has(k));
+  const hasUid = names.has("uid_tt") || names.has("uid_tt_ss");
+  if (hasSession && hasUid) return { level: "ok", label: "OK — похоже на живую сессию" };
+  if (hasSession) return { level: "warn", label: "Есть sessionid — проверь вручную" };
+  return { level: "bad", label: "Нет sessionid / sid_tt — вход может не сработать" };
+}
+
+function toNetscape(cookies) {
+  const lines = ["# Netscape HTTP Cookie File", "# Session Fox Lite", ""];
+  for (const c of cookies) {
+    const host = c.hostOnly ? c.domain.replace(/^\./, "") : (c.domain.startsWith(".") ? c.domain : "." + c.domain);
+    const flag = c.hostOnly ? "FALSE" : "TRUE";
+    const prefix = c.httpOnly ? "#HttpOnly_" : "";
+    lines.push([prefix + host, flag, c.path || "/", c.secure ? "TRUE" : "FALSE", c.expires || 0, c.name, c.value].join("\t"));
+  }
+  return lines.join("\n");
+}
+
+function sameSiteInt(v) {
+  if (v === "lax") return 1;
+  if (v === "strict") return 2;
+  if (v === "none") return 3;
+  return 0;
+}
+function firefoxHost(c) {
+  const d = c.domain.replace(/^\./, "");
+  return c.hostOnly ? d : "." + d;
+}
+
+const USER_JS = `user_pref("browser.shell.checkDefaultBrowser", false);
+user_pref("browser.startup.homepage_override.mstone", "ignore");
+user_pref("startup.homepage_welcome_url", "");
+user_pref("startup.homepage_welcome_url.additional", "");
+user_pref("startup.homepage_override_url", "");
+user_pref("browser.aboutwelcome.enabled", false);
+user_pref("datareporting.policy.dataSubmissionPolicyBypassNotification", true);
+user_pref("toolkit.telemetry.reportingpolicy.firstRun", false);
+user_pref("browser.startup.homepage", "https://www.tiktok.com");
+user_pref("browser.startup.page", 1);
+user_pref("network.cookie.cookieBehavior", 0);
+user_pref("network.cookie.lifetimePolicy", 0);
+user_pref("privacy.sanitize.sanitizeOnShutdown", false);
+user_pref("privacy.firstparty.isolate", false);
+user_pref("dom.security.https_only_mode", false);
+`;
+
+function batScript() {
+  return `@echo off
+chcp 65001 >nul
+setlocal EnableDelayedExpansion
+cd /d "%~dp0"
+set "PROFILE=%~dp0profile"
+set "FF="
+if exist "%ProgramFiles%\\Mozilla Firefox\\firefox.exe" set "FF=%ProgramFiles%\\Mozilla Firefox\\firefox.exe"
+if not defined FF if exist "%ProgramFiles(x86)%\\Mozilla Firefox\\firefox.exe" set "FF=%ProgramFiles(x86)%\\Mozilla Firefox\\firefox.exe"
+if not defined FF if exist "%LOCALAPPDATA%\\Mozilla Firefox\\firefox.exe" set "FF=%LOCALAPPDATA%\\Mozilla Firefox\\firefox.exe"
+if not defined FF (
+  for /f "delims=" %%I in ('where firefox 2^>nul') do (
+    set "FF=%%I"
+    goto :launch
+  )
+)
+:launch
+if not defined FF (
+  echo Firefox не найден.
+  pause
+  exit /b 1
+)
+start "" "!FF!" -no-remote -profile "%PROFILE%" "https://www.tiktok.com"
+`;
+}
+
+function shScript() {
+  return `#!/bin/sh
+set -eu
+DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+SRC="$DIR/profile"
+DEST="$HOME/.sessionfox/$(basename "$DIR" | tr -c 'A-Za-z0-9._-' '_')"
+mkdir -p "$DEST"
+cp -a "$SRC/." "$DEST/"
+FF=""
+for c in firefox firefox-esr /usr/bin/firefox /usr/bin/firefox-esr /snap/bin/firefox; do
+  if command -v "$c" >/dev/null 2>&1; then FF=$(command -v "$c"); break; fi
+  if [ -x "$c" ]; then FF="$c"; break; fi
+done
+if [ -z "$FF" ]; then
+  echo "Firefox не найден. sudo dnf install -y firefox"
+  exit 1
+fi
+exec "$FF" --no-remote --profile "$DEST" "https://www.tiktok.com"
+`;
+}
+
+async function buildSqlite(cookies) {
+  const SQL = await initSqlJs({
+    locateFile: f => "https://cdn.jsdelivr.net/npm/sql.js@1.12.0/dist/" + f
+  });
+  const db = new SQL.Database();
+  db.run("PRAGMA user_version = 11");
+  db.run(`CREATE TABLE moz_cookies (
+    id INTEGER PRIMARY KEY,
+    originAttributes TEXT NOT NULL DEFAULT '',
+    name TEXT, value TEXT, host TEXT, path TEXT,
+    expiry INTEGER, lastAccessed INTEGER, creationTime INTEGER,
+    isSecure INTEGER, isHttpOnly INTEGER,
+    inBrowserElement INTEGER DEFAULT 0,
+    sameSite INTEGER DEFAULT 0, rawSameSite INTEGER DEFAULT 0,
+    schemeMap INTEGER DEFAULT 0
+  )`);
+  db.run("CREATE UNIQUE INDEX moz_uniqueid ON moz_cookies (name, host, path, originAttributes)");
+  const nowUs = Date.now() * 1000;
+  const ins = db.prepare(`INSERT OR REPLACE INTO moz_cookies (
+    originAttributes, name, value, host, path, expiry,
+    lastAccessed, creationTime, isSecure, isHttpOnly,
+    inBrowserElement, sameSite, rawSameSite, schemeMap
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  for (const c of cookies) {
+    const ss = sameSiteInt(c.sameSite);
+    const expiry = c.expires > 0 ? c.expires : Math.floor(Date.now()/1000) + YEAR;
+    ins.run(["", c.name, c.value, firefoxHost(c), c.path || "/", expiry, nowUs, nowUs, c.secure ? 1 : 0, c.httpOnly ? 1 : 0, 0, ss, ss, 2]);
+  }
+  ins.free();
+  const bytes = db.export();
+  db.close();
+  return bytes;
+}
+
+async function buildPack(name, cookies) {
+  const sqlite = await buildSqlite(cookies);
+  const zip = new JSZip();
+  const safe = (name || "session").replace(/[^\wа-яА-ЯёЁ.-]+/g, "-") || "session";
+  const root = zip.folder(safe);
+  const profile = root.folder("profile");
+  profile.file("cookies.sqlite", sqlite);
+  profile.file("user.js", USER_JS);
+  root.file("Open-TikTok.bat", batScript());
+  root.file("open-tiktok.sh", shScript());
+  root.file("cookies.txt", toNetscape(cookies));
+  root.file("README.txt", "\uFEFFSession Fox Lite — " + safe + "\nКуки: " + cookies.length + "\n\nLinux:\n  chmod +x open-tiktok.sh && ./open-tiktok.sh\n\nWindows:\n  Open-TikTok.bat\n");
+  return zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+}
+
+// UI
+let current = null;
+const drop = document.getElementById("drop");
+const fileInput = document.getElementById("file");
+const panel = document.getElementById("panel");
+const errEl = document.getElementById("err");
+const paste = document.getElementById("paste");
+
+function showErr(msg) {
+  errEl.textContent = msg;
+  errEl.classList.toggle("show", !!msg);
+}
+function showSession(name, cookies) {
+  current = { name, cookies };
+  document.getElementById("fname").textContent = name;
+  document.getElementById("ccount").textContent = String(cookies.length);
+  const a = assess(cookies);
+  const h = document.getElementById("health");
+  h.innerHTML = '<span class="badge ' + a.level + '">' + a.label + "</span>";
+  const important = cookies.filter(c => SESSION_KEYS.includes(c.name.toLowerCase())).map(c => c.name);
+  document.getElementById("keys").textContent = important.length ? important.join(", ") : "—";
+  panel.classList.add("show");
+  showErr("");
+}
+
+function handleText(text, name) {
+  const { cookies, format } = detectAndParse(text);
+  if (!cookies.length) {
+    showErr("Куки не найдены. Нужен Netscape (.txt), Cookie header или name=value.");
+    panel.classList.remove("show");
+    current = null;
+    return;
+  }
+  showSession(name || "session-" + format, cookies);
+}
+
+drop.addEventListener("click", () => fileInput.click());
+drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+drop.addEventListener("drop", e => {
+  e.preventDefault();
+  drop.classList.remove("over");
+  const f = e.dataTransfer.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = () => handleText(String(r.result || ""), f.name.replace(/\.[^.]+$/, "") || "session");
+  r.readAsText(f);
+});
+fileInput.addEventListener("change", () => {
+  const f = fileInput.files && fileInput.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = () => handleText(String(r.result || ""), f.name.replace(/\.[^.]+$/, "") || "session");
+  r.readAsText(f);
+});
+document.getElementById("parseBtn").addEventListener("click", () => {
+  handleText(paste.value, "pasted-session");
+});
+document.getElementById("launch").addEventListener("click", async () => {
+  if (!current || !current.cookies.length) return;
+  const btn = document.getElementById("launch");
+  btn.disabled = true;
+  btn.textContent = "Собираю pack…";
+  try {
+    const blob = await buildPack(current.name, current.cookies);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = (current.name || "session") + "-firefox.zip";
+    a.click();
+    URL.revokeObjectURL(a.href);
+    btn.textContent = "Скачано ✓ — распакуй и ./open-tiktok.sh";
+  } catch (e) {
+    showErr("Ошибка сборки: " + (e && e.message ? e.message : e));
+    btn.textContent = "Скачать pack → Firefox + tiktok.com";
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

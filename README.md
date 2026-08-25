@@ -2,44 +2,42 @@
 
 Перетащи `.txt` с куками TikTok → получи готовый профиль Firefox, который открывает **tiktok.com** уже с сессией.
 
-## Что умеет
+## Быстрый старт без npm (рекомендуется на VM)
 
-- Парсит **не JSON**: Netscape `cookies.txt`, строка `Cookie:`, пары `name=value`, `Set-Cookie`
-- Несколько аккаунтов локально (только в браузере)
-- Кнопка **Открыть Firefox → tiktok.com** собирает zip:
-  - `profile/cookies.sqlite` + `user.js`
-  - `Open-TikTok.bat` (Windows)
-  - `open-tiktok.sh` (Linux / macOS)
-  - `cookies.txt` (backup)
+Нет места / нет Node? Открой один файл:
 
-## Запуск
+1. Скачай [`session-fox-lite.html`](./session-fox-lite.html)
+2. Открой в Firefox: `firefox session-fox-lite.html`
+3. Кинь `.txt` с куками → **Скачать pack**
+4. Распакуй zip и запусти:
+
+```bash
+unzip имя-firefox.zip
+cd имя
+chmod +x open-tiktok.sh
+./open-tiktok.sh
+```
+
+На Fedora: `sudo dnf install -y firefox`
+
+Интернет нужен только один раз (CDN sql.js + jszip).
+
+---
+
+## Полная версия (npm)
 
 ```bash
 npm install
-# скопируй wasm sql.js в public (после install):
 cp node_modules/sql.js/dist/sql-wasm.wasm public/sql-wasm.wasm
 npm run dev
 ```
 
-Сборка:
+## Что умеет
 
-```bash
-npm run build
-npm run preview
-```
-
-## На виртуальной машине
-
-1. Открой Session Fox в браузере
-2. Перетащи `.txt` с куками
-3. Нажми **Открыть Firefox → tiktok.com**
-4. Распакуй zip → `Open-TikTok.bat` (или `./open-tiktok.sh`)
-5. Нужен установленный **Mozilla Firefox**
-
-Страница не может сама запустить Firefox на твоей машине — это ограничение браузера. Архив с профилем и есть «одна кнопка» уже на ВМ.
+- Парсит **не JSON**: Netscape `cookies.txt`, строка `Cookie:`, пары `name=value`, `Set-Cookie`
+- Zip-pack: `profile/cookies.sqlite` + `user.js` + `Open-TikTok.bat` + `open-tiktok.sh`
+- Основной профиль Firefox не трогается (`--no-remote`)
 
 ## Важно
 
-- Куки — секрет сессии. Хранятся только в `localStorage` этого браузера, на сервер не уходят.
-- Используй только **свои** аккаунты.
-- Основной профиль Firefox не меняется (`-no-remote` + отдельный profile).
+- Куки — секрет сессии. Используй только **свои** аккаунты.
